@@ -1,13 +1,104 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>project</title>
+    <title>Folded-Towel Map — TNM</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+
+    <!-- ── Sidenav ── -->
+    <nav id="sidenav">
+      <div class="nav-header">
+        <span class="nav-title">Systems</span>
+        <button id="close-nav">✕</button>
+      </div>
+      <ul class="nav-list">
+        <li class="nav-item active">
+          Folded-Towel Map
+          <span class="nav-desc">Rössler 1979 · hyperchaotic</span>
+        </li>
+      </ul>
+
+      <div class="nav-info">
+        <div class="info-title">Equations</div>
+        <div class="info-eq">x′ = a·x(1−x) − 0.05(y+0.35)(1−2z)</div>
+        <div class="info-eq">y′ = 0.1((y+0.35)(1+2z)−1)(1−1.9x)</div>
+        <div class="info-eq">z′ = 3.78·z(1−z) + b·y</div>
+        <div class="info-params">a = 3.8 &nbsp;·&nbsp; b = 0.2</div>
+        <div class="info-note">
+          λ₁=0.430 &nbsp;λ₂=0.377 &nbsp;λ₃=−3.299
+        </div>
+        <div class="info-note" style="margin-top:8px">
+          The attractor is a thin folded sheet:<br>
+          y-axis is ~11× thinner than x/z.<br>
+          Scaled non-uniformly so the 3D<br>
+          structure is visible.
+        </div>
+      </div>
+    </nav>
+
+    <!-- ── Top Bar ── -->
+    <header id="topbar">
+      <button id="menu-btn">☰</button>
+      <span id="system-label">Folded-Towel Map</span>
+      <div id="top-actions">
+        <!-- Render mode toggle -->
+        <div class="mode-toggle">
+          <button id="mode-points" class="mode-btn active">· Points</button>
+          <button id="mode-line"   class="mode-btn">— Lines</button>
+        </div>
+        <button id="clear-btn">⊗ Clear</button>
+        <button id="paths-btn">
+          ⊞ Paths
+          <span id="path-count" style="display:none"></span>
+        </button>
+        <button id="settings-btn">⚙ Settings</button>
+      </div>
+    </header>
+
+    <!-- ── First-use hint ── -->
+    <div id="click-hint">
+      <span>Click anywhere to plot a path</span>
+      <span class="hint-sub">Drag to rotate · Scroll to zoom · Right-drag to pan</span>
+    </div>
+
+    <!-- ── Computing indicator ── -->
+    <div id="loading-hint" class="hidden">Computing path…</div>
+
+    <!-- ── Settings Modal ── -->
+    <div id="settings-modal" class="modal hidden">
+      <div class="modal-title">Settings</div>
+
+      <label>
+        <span class="label-text">Iterations</span>
+        <span id="iter-display" class="label-value">20,000</span>
+        <input id="iter-input" type="range" min="5000" max="80000" step="5000" value="20000" />
+        <span class="field-hint">More = denser sheet, slower compute</span>
+      </label>
+
+      <label>
+        <span class="label-text">Path color</span>
+        <input id="color-input" type="color" value="#ff6030" />
+        <span class="field-hint">Hue shifts along the path</span>
+      </label>
+    </div>
+
+    <!-- ── Paths Modal ── -->
+    <div id="paths-modal" class="modal hidden">
+      <div class="modal-title">Active Paths</div>
+      <table id="paths-table">
+        <thead>
+          <tr><th>#</th><th>Color</th><th>Iterations</th><th></th></tr>
+        </thead>
+        <tbody id="paths-tbody"></tbody>
+      </table>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

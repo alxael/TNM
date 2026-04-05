@@ -24,6 +24,9 @@ export interface MapDefinition {
   /** Half-extents of the axis-guide box. Defaults to (17, 17, 15). */
   axisBox?: { hx: number; hy: number; hz: number };
 
+  /** Which render modes are available. Defaults to ['points', 'line']. */
+  supportedModes?: Array<'points' | 'line'>;
+
   /** Content shown in the info panel. */
   info: {
     equations: string[];

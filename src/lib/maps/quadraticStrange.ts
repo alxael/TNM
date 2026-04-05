@@ -77,6 +77,7 @@ export const quadraticStrangeMap: MapDefinition = {
 
   cameraPosition: { x: 20, y: 15, z: 40 },
   axisBox: { hx: 15, hy: 15, hz: 15 },
+  supportedModes: ['points'],
 
   info: {
     equations: [

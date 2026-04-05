@@ -75,6 +75,7 @@ export const foldedTowelMap: MapDefinition = {
   rotation: { x: 0, y: 0, z: Math.PI / 2 },
   cameraPosition: { x: 20, y: 15, z: 55 },
   axisBox: { hx: 17, hy: 17, hz: 15 },
+  supportedModes: ['points'],
 
   info: {
     equations: [

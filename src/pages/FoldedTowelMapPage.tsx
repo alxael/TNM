@@ -70,7 +70,8 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
   const pathManagerRef = useRef<PathManager | null>(null);
   const animFrameRef = useRef<number>(0);
 
-  const [renderMode, setRenderMode] = useState<'points' | 'line'>('points');
+  const supportedModes = mapDef.supportedModes ?? ['points', 'line'];
+  const [renderMode, setRenderMode] = useState<'points' | 'line'>(supportedModes[0]);
   const [iterations, setIterations] = useState(1000);
   const [color, setColor] = useState('#ff6030');
   const [lineWidth, setLineWidth] = useState(3);
@@ -207,6 +208,7 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
         onMenuClick={onMenuClick}
         renderMode={renderMode}
         onRenderModeChange={setRenderMode}
+        supportedModes={supportedModes}
         onClear={handleClear}
         onPathsClick={() => setPathsOpen(!pathsOpen)}
         onSettingsClick={() => setSettingsOpen(!settingsOpen)}

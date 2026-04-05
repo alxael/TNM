@@ -23,6 +23,7 @@ interface TopBarProps {
   onMenuClick: () => void;
   renderMode: 'points' | 'line';
   onRenderModeChange: (mode: 'points' | 'line') => void;
+  supportedModes: Array<'points' | 'line'>;
   onClear: () => void;
   onPathsClick: () => void;
   onSettingsClick: () => void;
@@ -71,6 +72,7 @@ export function TopBar({
   onMenuClick,
   renderMode,
   onRenderModeChange,
+  supportedModes,
   onClear,
   onPathsClick,
   onSettingsClick,
@@ -94,33 +96,37 @@ export function TopBar({
       </ToolbarGroup>
 
       <ToolbarGroup className={styles.rightGroup}>
-        <Tooltip content="Points mode" relationship="label">
-          <ToolbarToggleButton
-            appearance="subtle"
-            name="renderMode"
-            value="points"
-            icon={<GridDots20Regular />}
-            checked={renderMode === 'points'}
-            onClick={() => onRenderModeChange('points')}
-            size="small"
-          >
-            Points
-          </ToolbarToggleButton>
-        </Tooltip>
+        {supportedModes.includes('points') && (
+          <Tooltip content="Points mode" relationship="label">
+            <ToolbarToggleButton
+              appearance="subtle"
+              name="renderMode"
+              value="points"
+              icon={<GridDots20Regular />}
+              checked={renderMode === 'points'}
+              onClick={() => onRenderModeChange('points')}
+              size="small"
+            >
+              Points
+            </ToolbarToggleButton>
+          </Tooltip>
+        )}
 
-        <Tooltip content="Line mode" relationship="label">
-          <ToolbarToggleButton
-            appearance="subtle"
-            name="renderMode"
-            value="line"
-            icon={<LineHorizontal120Regular />}
-            checked={renderMode === 'line'}
-            onClick={() => onRenderModeChange('line')}
-            size="small"
-          >
-            Lines
-          </ToolbarToggleButton>
-        </Tooltip>
+        {supportedModes.includes('line') && (
+          <Tooltip content="Line mode" relationship="label">
+            <ToolbarToggleButton
+              appearance="subtle"
+              name="renderMode"
+              value="line"
+              icon={<LineHorizontal120Regular />}
+              checked={renderMode === 'line'}
+              onClick={() => onRenderModeChange('line')}
+              size="small"
+            >
+              Lines
+            </ToolbarToggleButton>
+          </Tooltip>
+        )}
 
         <ToolbarDivider />
 

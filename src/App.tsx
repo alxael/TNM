@@ -1,35 +1,49 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useState, useCallback } from 'react';
+import { makeStyles } from '@fluentui/react-components';
+import { SideNav, type PageId } from './components/SideNav';
+import { AttractorPage } from './pages/FoldedTowelMapPage';
+import { HomePage } from './pages/HomePage';
+import { getMap } from './lib/mapDefinition';
+// ensure all maps are registered
+import './lib/systems';
 
-function App() {
-  const [count, setCount] = useState(0)
+const useStyles = makeStyles({
+  root: {
+    width: '100vw',
+    height: '100vh',
+    overflow: 'hidden',
+    backgroundColor: '#06060e',
+  },
+});
+
+export default function App() {
+  const styles = useStyles();
+  const [navOpen, setNavOpen] = useState(false);
+  const [activePage, setActivePage] = useState<PageId>('folded-towel');
+
+  const handleNavigate = useCallback((pageId: PageId) => {
+    setActivePage(pageId);
+    setNavOpen(false);
+  }, []);
+
+  const toggleNav = useCallback(() => setNavOpen((v) => !v), []);
+
+  const mapDef = activePage !== 'home' ? getMap(activePage) : undefined;
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <div className={styles.root}>
+      <SideNav
+        open={navOpen}
+        activePage={activePage}
+        onNavigate={handleNavigate}
+        onOpenChange={setNavOpen}
+      />
+      {activePage === 'home' && (
+        <HomePage onMenuClick={toggleNav} onNavigate={handleNavigate} />
+      )}
+      {mapDef && (
+        <AttractorPage key={mapDef.id} mapDef={mapDef} onMenuClick={toggleNav} />
+      )}
+    </div>
+  );
 }
-
-export default App

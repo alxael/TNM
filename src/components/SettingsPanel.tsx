@@ -34,7 +34,10 @@ const useStyles = makeStyles({
     zIndex: 150,
     width: '280px',
     backgroundColor: tokens.colorNeutralBackground1,
-    borderColor: tokens.colorNeutralStroke2,
+    borderTopColor: tokens.colorNeutralStroke2,
+    borderRightColor: tokens.colorNeutralStroke2,
+    borderBottomColor: tokens.colorNeutralStroke2,
+    borderLeftColor: tokens.colorNeutralStroke2,
   },
   content: {
     display: 'flex',
@@ -104,9 +107,12 @@ export function SettingsPanel({
                 value={c}
                 aria-label={c}
                 size="medium"
-                selected={c === color}
                 onClick={() => onColorChange(c)}
-                style={{ borderColor: c === color ? tokens.colorBrandForeground1 : 'transparent' }}
+                style={{
+                  borderColor: c === color ? tokens.colorBrandForeground1 : 'transparent',
+                  outline: c === color ? `2px solid ${tokens.colorBrandForeground1}` : 'none',
+                  outlineOffset: '1px',
+                }}
               />
             ))}
           </div>

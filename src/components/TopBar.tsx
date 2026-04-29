@@ -99,11 +99,10 @@ export function TopBar({
         {supportedModes.includes('points') && (
           <Tooltip content="Points mode" relationship="label">
             <ToolbarToggleButton
-              appearance="subtle"
+              appearance={renderMode === 'points' ? 'primary' : 'subtle'}
               name="renderMode"
               value="points"
               icon={<GridDots20Regular />}
-              checked={renderMode === 'points'}
               onClick={() => onRenderModeChange('points')}
               size="small"
             >
@@ -115,11 +114,10 @@ export function TopBar({
         {supportedModes.includes('line') && (
           <Tooltip content="Line mode" relationship="label">
             <ToolbarToggleButton
-              appearance="subtle"
+              appearance={renderMode === 'line' ? 'primary' : 'subtle'}
               name="renderMode"
               value="line"
               icon={<LineHorizontal120Regular />}
-              checked={renderMode === 'line'}
               onClick={() => onRenderModeChange('line')}
               size="small"
             >

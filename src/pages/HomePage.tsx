@@ -74,7 +74,10 @@ const useStyles = makeStyles({
   card: {
     cursor: 'pointer',
     ':hover': {
-      borderColor: tokens.colorBrandForeground1,
+      borderTopColor: tokens.colorBrandForeground1,
+      borderRightColor: tokens.colorBrandForeground1,
+      borderBottomColor: tokens.colorBrandForeground1,
+      borderLeftColor: tokens.colorBrandForeground1,
     },
   },
 });

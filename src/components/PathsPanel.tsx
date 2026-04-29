@@ -30,7 +30,10 @@ const useStyles = makeStyles({
     zIndex: 150,
     width: '320px',
     backgroundColor: tokens.colorNeutralBackground1,
-    borderColor: tokens.colorNeutralStroke2,
+    borderTopColor: tokens.colorNeutralStroke2,
+    borderRightColor: tokens.colorNeutralStroke2,
+    borderBottomColor: tokens.colorNeutralStroke2,
+    borderLeftColor: tokens.colorNeutralStroke2,
   },
   tableWrap: {
     padding: '0 8px 12px',

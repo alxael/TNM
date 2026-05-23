@@ -1,6 +1,14 @@
 // server.js
 import { WebSocketServer } from 'ws';
 import dgram from 'dgram';
+import { spawn } from 'child_process';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+
+// Recreate __dirname for ES Modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const WS_PORT = 8080;
 const PD_PORT = 9000;
@@ -53,3 +61,54 @@ wss.on('connection', (ws) => {
     console.log('[Bridge] Frontend client disconnected.');
   });
 });
+
+/**
+ * Automatically Spawns Pure Data on Server Launch
+ */
+function launchPureData() {
+  const patchPath = path.join(__dirname, '/src/assets/main.pd');
+  
+  const args = ['-nogui', patchPath];
+
+  // Default command identifier
+  let pdCommand = 'pd';
+
+  // Windows Specific Resolution
+  if (process.platform === 'win32') {
+    const defaultWindowsPath = 'C:\\Program Files\\Pd\\bin\\pd.exe';
+    
+    if (fs.existsSync(defaultWindowsPath)) {
+      pdCommand = defaultWindowsPath; // Wrap in quotes to safely handle spaces in path
+    } else {
+      console.warn(`[Bridge Warning] Looked for Pure Data at default path, but couldn't find it: ${defaultWindowsPath}`);
+      console.warn(`Falling back to system global variable execution shortcut 'pd'...`);
+    }
+  }
+
+  console.log(`[Bridge] Launching Pure Data via: ${pdCommand}...`);
+
+  console.log(args);
+  
+  const pdProcess = spawn(pdCommand, args, { shell: false, windowsHide: true });
+
+  pdProcess.on('error', (err) => {
+    console.error('\x1b[31m%s\x1b[0m', `[Bridge Error] Failed to start Pure Data: ${err.message}`);
+  });
+
+  pdProcess.stdout.on('data', (data) => {
+    console.log(`[Pure Data]: ${data.toString().trim()}`);
+  });
+
+  pdProcess.stderr.on('data', (data) => {
+    console.log(`[Pure Data System]: ${data.toString().trim()}`);
+  });
+
+  process.on('exit', () => pdProcess.kill());
+  process.on('SIGINT', () => {
+    pdProcess.kill();
+    process.exit();
+  });
+}
+
+// Start up automated engine hooks
+launchPureData();

@@ -79,6 +79,7 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
   const [iterations, setIterations] = useState(1000);
   const [color, setColor] = useState('#ff6030');
   const [lineWidth, setLineWidth] = useState(3);
+  const [soundDuration, setSoundDuration] = useState(1); // seconds
   const [pathCount, setPathCount] = useState(0);
   const [paths, setPaths] = useState<ReadonlyArray<PathEntry>>([]);
   const [showHint, setShowHint] = useState(true);
@@ -91,10 +92,12 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
   const iterationsRef = useRef(iterations);
   const colorRef = useRef(color);
   const lineWidthRef = useRef(lineWidth);
+  const soundDurationRef = useRef(soundDuration);
   renderModeRef.current = renderMode;
   iterationsRef.current = iterations;
   colorRef.current = color;
   lineWidthRef.current = lineWidth;
+  soundDurationRef.current = soundDuration;
 
   // Manage WebSocket lifecycle and active playback loops safely
   useEffect(() => {
@@ -202,6 +205,11 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
         setPathCount(pm.count);
         setPaths([...pm.entries]);
 
+        // The path is fully computed at this point — drawPath returned synchronously.
+        // The interval below only streams coordinates to the audio engine for modulation,
+        // so the spinner can stop now.
+        setComputing(false);
+
         const points = entry.positions; // Flat Float32Array structured as [x0, y0, z0, x1, y1, z1...]
         const totalPoints = points.length / 3;
         let currentIndex = 0;
@@ -209,11 +217,18 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
         // Pull the map definition's operational bounding extents for scaling
         const { hx = 0, hy = 0, hz = 0 } = mapDef.axisBox ?? {};
 
-        // Begin tracing and streaming the coordinates sequentially
+        // Audio playback should always finish within a fixed wall-clock window,
+        // regardless of how many iterations the path contains. We step through
+        // multiple points per tick when needed so the whole sweep fits.
+        const TARGET_AUDIO_MS = soundDurationRef.current * 1000;
+        const TICK_MS = 25;            // ~40 ticks/sec
+        const totalTicks = Math.max(1, Math.ceil(TARGET_AUDIO_MS / TICK_MS));
+        const stride = Math.max(1, Math.floor(totalPoints / totalTicks));
+
+        // Begin streaming the coordinates sequentially to the audio engine
         streamIntervalRef.current = setInterval(() => {
           if (currentIndex >= totalPoints) {
             if (streamIntervalRef.current) clearInterval(streamIntervalRef.current);
-            setComputing(false);
             return;
           }
 
@@ -228,13 +243,13 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
           const normY = (rawY + hy) / (2 * hy);
           const normZ = (rawZ + hz) / (2 * hz);
 
-          // Stream the data safely over the websocket connection bridge
+          // Push the latest modulation values to the WebPd audio worklet
           if (audioService && typeof audioService.sendModulation === 'function') {
             audioService.sendModulation(normX, normY, normZ);
           }
 
-          currentIndex++;
-        }, 25); // Fires ~40 updates per second for fluid sound modulation mapping
+          currentIndex += stride;
+        }, TICK_MS);
       } else {
         setComputing(false);
       }
@@ -305,6 +320,8 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
           onColorChange={setColor}
           lineWidth={lineWidth}
           onLineWidthChange={setLineWidth}
+          soundDuration={soundDuration}
+          onSoundDurationChange={setSoundDuration}
         />
       )}
 

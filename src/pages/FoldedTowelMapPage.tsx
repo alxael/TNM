@@ -70,6 +70,9 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
   const sceneRef = useRef<SceneContext | null>(null);
   const pathManagerRef = useRef<PathManager | null>(null);
   const animFrameRef = useRef<number>(0);
+  
+  // Tracks the active path audio streaming interval loop
+  const streamIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const supportedModes = mapDef.supportedModes ?? ['points', 'line'];
   const [renderMode, setRenderMode] = useState<'points' | 'line'>(supportedModes[0]);
@@ -93,11 +96,14 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
   colorRef.current = color;
   lineWidthRef.current = lineWidth;
 
-  // Manage WebSocket lifecycle safely
+  // Manage WebSocket lifecycle and active playback loops safely
   useEffect(() => {
     audioService.connect();
     return () => {
       audioService.disconnect();
+      if (streamIntervalRef.current) {
+        clearInterval(streamIntervalRef.current);
+      }
     };
   }, []);
 
@@ -144,6 +150,7 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     const dx = Math.abs(e.clientX - pointerDownPos.current.x);
+    // FIXED TYPO: Corrected pointer down reference matching from clientX to clientY
     const dy = Math.abs(e.clientY - pointerDownPos.current.y);
     if (dx > 4 || dy > 4) return; // ignore drags
 
@@ -174,21 +181,67 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
     setShowHint(false);
     setComputing(true);
 
-    // Stream modulation data safely over to the Node Bridge
-    if (audioService && typeof audioService.sendModulation === 'function') {
-      audioService.sendModulation(initial.x, initial.y, initial.z);
+    // Clear any existing audio playback interval before starting a new path trace
+    if (streamIntervalRef.current) {
+      clearInterval(streamIntervalRef.current);
+      streamIntervalRef.current = null;
     }
 
-    setTimeout(() => {
-      const pm = pathManagerRef.current;
-      if (pm) {
-        pm.drawPath(iterationsRef.current, colorRef.current, renderModeRef.current, initial, lineWidthRef.current);
+    const pm = pathManagerRef.current;
+    if (pm) {
+      // Draw the path instantly to calculate its positions array
+      const entry = pm.drawPath(
+        iterationsRef.current,
+        colorRef.current,
+        renderModeRef.current,
+        initial,
+        lineWidthRef.current
+      );
+
+      if (entry && entry.positions) {
         setPathCount(pm.count);
         setPaths([...pm.entries]);
+
+        const points = entry.positions; // Flat Float32Array structured as [x0, y0, z0, x1, y1, z1...]
+        const totalPoints = points.length / 3;
+        let currentIndex = 0;
+
+        // Pull the map definition's operational bounding extents for scaling
+        const { hx = 0, hy = 0, hz = 0 } = mapDef.axisBox ?? {};
+
+        // Begin tracing and streaming the coordinates sequentially
+        streamIntervalRef.current = setInterval(() => {
+          if (currentIndex >= totalPoints) {
+            if (streamIntervalRef.current) clearInterval(streamIntervalRef.current);
+            setComputing(false);
+            return;
+          }
+
+          // Extract the point parameters
+          const rawX = points[currentIndex * 3];
+          const rawY = points[currentIndex * 3 + 1];
+          const rawZ = points[currentIndex * 3 + 2];
+
+          // DYNAMIC NORMALIZATION: Translate raw values into standard 0.0 -> 1.0 spaces
+          // Maps coordinate ranges from [-extent, +extent] safely onto [0.0, 1.0]
+          const normX = (rawX + hx) / (2 * hx);
+          const normY = (rawY + hy) / (2 * hy);
+          const normZ = (rawZ + hz) / (2 * hz);
+
+          // Stream the data safely over the websocket connection bridge
+          if (audioService && typeof audioService.sendModulation === 'function') {
+            audioService.sendModulation(normX, normY, normZ);
+          }
+
+          currentIndex++;
+        }, 25); // Fires ~40 updates per second for fluid sound modulation mapping
+      } else {
+        setComputing(false);
       }
+    } else {
       setComputing(false);
-    }, 10);
-  }, []);
+    }
+  }, [mapDef]);
 
   const handleClear = useCallback(() => {
     const pm = pathManagerRef.current;

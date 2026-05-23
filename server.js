@@ -19,7 +19,19 @@ wss.on('connection', (ws) => {
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message);
-      const { x, y, z } = data;
+      let { x, y, z } = data;
+
+      // --- AUDIO SAFEGUARDS & CLAMPING ---
+      // 1. Keep X bounded so filter cutoff stays between 100Hz and 2100Hz
+      x = Math.max(0.0, Math.min(x, 1.0));
+
+      // 2. STRICT CAP ON Y: Ensure feedback gain (y * 0.85) NEVER reaches or exceeds 1.0
+      // Capping Y at 1.1 means max feedback is 1.1 * 0.85 = 0.935 (Beautiful, long, safe echo)
+      y = Math.max(0.0, Math.min(y, 1.1));
+
+      // 3. Keep Z bounded between 0 and 1 for safe, clean stereo panning
+      z = Math.max(0.0, Math.min(z, 1.0));
+      // ------------------------------------
 
       // Send as a pure space-separated list of three floats: "0.45 0.12 0.88"
       // No extra text characters or semicolons, making it completely bulletproof for Pd's [unpack]

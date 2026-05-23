@@ -14,6 +14,7 @@ import { SettingsPanel } from '../components/SettingsPanel';
 import { PathsPanel } from '../components/PathsPanel';
 import { InfoPanel } from '../components/InfoPanel';
 import type { MapDefinition } from '../lib/mapDefinition';
+import { audioService } from '../lib/audioService';
 
 interface AttractorPageProps {
   mapDef: MapDefinition;
@@ -83,7 +84,6 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
   const [pathsOpen, setPathsOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
 
-  // Store latest values in refs for the click handler
   const renderModeRef = useRef(renderMode);
   const iterationsRef = useRef(iterations);
   const colorRef = useRef(color);
@@ -92,6 +92,14 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
   iterationsRef.current = iterations;
   colorRef.current = color;
   lineWidthRef.current = lineWidth;
+
+  // Manage WebSocket lifecycle safely
+  useEffect(() => {
+    audioService.connect();
+    return () => {
+      audioService.disconnect();
+    };
+  }, []);
 
   // Initialize Three.js scene
   useEffect(() => {
@@ -105,7 +113,6 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
     const pm = new PathManager(ctx.scene, mapDef);
     pathManagerRef.current = pm;
 
-    // Animation loop
     function animate() {
       animFrameRef.current = requestAnimationFrame(animate);
       ctx.controls.update();
@@ -113,7 +120,6 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
     }
     animate();
 
-    // Resize handler
     const onResize = () => handleResize(ctx, container);
     const resizeObserver = new ResizeObserver(onResize);
     resizeObserver.observe(container);
@@ -130,7 +136,6 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
     };
   }, []);
 
-  // Click to draw path
   const pointerDownPos = useRef({ x: 0, y: 0 });
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
@@ -140,18 +145,16 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     const dx = Math.abs(e.clientX - pointerDownPos.current.x);
     const dy = Math.abs(e.clientY - pointerDownPos.current.y);
-    if (dx > 4 || dy > 4) return; // was a drag
+    if (dx > 4 || dy > 4) return; // ignore drags
 
     const ctx = sceneRef.current;
     const container = containerRef.current;
     if (!ctx || !container) return;
 
-    // Convert click to NDC
     const rect = container.getBoundingClientRect();
     const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
-    // Raycast onto a plane through the origin, facing the camera
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), ctx.camera);
     const plane = new THREE.Plane();
@@ -162,7 +165,6 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
     const worldPt = new THREE.Vector3();
     raycaster.ray.intersectPlane(plane, worldPt);
 
-    // Un-rotate by the object rotation to get world-space coordinates
     const rot = mapDef.rotation ?? { x: 0, y: 0, z: 0 };
     const invEuler = new THREE.Euler(-rot.x, -rot.y, -rot.z, 'ZYX');
     const unrotated = worldPt.clone().applyEuler(invEuler);
@@ -171,6 +173,11 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
 
     setShowHint(false);
     setComputing(true);
+
+    // Stream modulation data safely over to the Node Bridge
+    if (audioService && typeof audioService.sendModulation === 'function') {
+      audioService.sendModulation(initial.x, initial.y, initial.z);
+    }
 
     setTimeout(() => {
       const pm = pathManagerRef.current;

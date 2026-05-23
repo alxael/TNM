@@ -7,7 +7,8 @@ import {
   Spinner,
   tokens,
 } from '@fluentui/react-components';
-import { createScene, addAxisBox, handleResize, type SceneContext } from '../lib/sceneSetup';
+import { createScene, addAxisBox, addRoomEnvironment, handleResize, type SceneContext } from '../lib/sceneSetup';
+import { setupVRControls, type VRControls } from '../lib/vrControls';
 import { PathManager, type PathEntry } from '../lib/pathManager';
 import { TopBar } from '../components/TopBar';
 import { SettingsPanel } from '../components/SettingsPanel';
@@ -32,6 +33,12 @@ const useStyles = makeStyles({
     width: '100%',
     height: '100%',
     cursor: 'crosshair',
+  },
+  vrButtonHost: {
+    position: 'absolute',
+    bottom: '20px',
+    right: '20px',
+    zIndex: 100,
   },
   hintOverlay: {
     position: 'absolute',
@@ -67,7 +74,9 @@ const useStyles = makeStyles({
 export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
   const styles = useStyles();
   const containerRef = useRef<HTMLDivElement>(null);
+  const vrButtonRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<SceneContext | null>(null);
+  const vrControlsRef = useRef<VRControls | null>(null);
   const pathManagerRef = useRef<PathManager | null>(null);
   const animFrameRef = useRef<number>(0);
   
@@ -122,20 +131,52 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
     const pm = new PathManager(ctx.scene, mapDef);
     pathManagerRef.current = pm;
 
-    function animate() {
-      animFrameRef.current = requestAnimationFrame(animate);
-      ctx.controls.update();
+    // Derive an orbit radius/height from the camera's initial position so each
+    // attractor frames itself sensibly in VR without per-system tuning.
+    const camPos = mapDef.cameraPosition ?? { x: 20, y: 15, z: 55 };
+    const orbitRadius = Math.hypot(camPos.x, camPos.z);
+    const orbitHeight = camPos.y;
+
+    // Virtual room — floor grid + subtle wireframe walls sized to enclose the
+    // orbit circle so the user has spatial reference while in VR.
+    addRoomEnvironment(ctx.scene, {
+      attractorHalfExtents: mapDef.axisBox,
+      roomRadius: orbitRadius * 1.2,
+      roomHeight: orbitHeight + (mapDef.axisBox?.hy ?? 17) + 10,
+    });
+    const vr = setupVRControls(ctx, {
+      radius: orbitRadius,
+      height: orbitHeight,
+      onSelect: (worldPt) => seedPathRef.current(worldPt),
+      onClear: () => handleClearRef.current(),
+    });
+    vrControlsRef.current = vr;
+    if (vrButtonRef.current) vrButtonRef.current.appendChild(vr.button);
+
+    // Use setAnimationLoop so the same loop drives both desktop and XR frames.
+    let lastTime = performance.now();
+    ctx.renderer.setAnimationLoop(() => {
+      const now = performance.now();
+      const delta = (now - lastTime) / 1000;
+      lastTime = now;
+      if (ctx.renderer.xr.isPresenting) {
+        vr.update(delta);
+      } else {
+        ctx.controls.update();
+      }
       ctx.renderer.render(ctx.scene, ctx.camera);
-    }
-    animate();
+    });
 
     const onResize = () => handleResize(ctx, container);
     const resizeObserver = new ResizeObserver(onResize);
     resizeObserver.observe(container);
 
     return () => {
+      ctx.renderer.setAnimationLoop(null);
       cancelAnimationFrame(animFrameRef.current);
       resizeObserver.disconnect();
+      vr.dispose();
+      vrControlsRef.current = null;
       pm.dispose();
       ctx.renderer.dispose();
       ctx.controls.dispose();
@@ -147,13 +188,94 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
 
   const pointerDownPos = useRef({ x: 0, y: 0 });
 
+  const handleClear = useCallback(() => {
+    const pm = pathManagerRef.current;
+    if (pm) {
+      pm.clearAll();
+      setPathCount(0);
+      setPaths([]);
+    }
+  }, []);
+
+  // Core path-seeding routine used by both desktop clicks and VR controller
+  // trigger events. Takes a world-space point on the camera-facing plane.
+  const seedPathAtWorldPoint = useCallback((worldPt: THREE.Vector3) => {
+    const pm = pathManagerRef.current;
+    if (!pm) return;
+
+    const rot = mapDef.rotation ?? { x: 0, y: 0, z: 0 };
+    const invEuler = new THREE.Euler(-rot.x, -rot.y, -rot.z, 'ZYX');
+    const unrotated = worldPt.clone().applyEuler(invEuler);
+
+    const initial = mapDef.worldToAttractor(unrotated.x, unrotated.y, unrotated.z);
+
+    setShowHint(false);
+    setComputing(true);
+
+    // Clear any existing audio playback interval before starting a new path trace
+    if (streamIntervalRef.current) {
+      clearInterval(streamIntervalRef.current);
+      streamIntervalRef.current = null;
+    }
+
+    const entry = pm.drawPath(
+      iterationsRef.current,
+      colorRef.current,
+      renderModeRef.current,
+      initial,
+      lineWidthRef.current,
+    );
+
+    if (!entry?.positions) {
+      setComputing(false);
+      return;
+    }
+
+    setPathCount(pm.count);
+    setPaths([...pm.entries]);
+    setComputing(false);
+
+    const points = entry.positions;
+    const totalPoints = points.length / 3;
+    let currentIndex = 0;
+
+    const { hx = 0, hy = 0, hz = 0 } = mapDef.axisBox ?? {};
+    const TARGET_AUDIO_MS = soundDurationRef.current * 1000;
+    const TICK_MS = 25;
+    const totalTicks = Math.max(1, Math.ceil(TARGET_AUDIO_MS / TICK_MS));
+    const stride = Math.max(1, Math.floor(totalPoints / totalTicks));
+
+    streamIntervalRef.current = setInterval(() => {
+      if (currentIndex >= totalPoints) {
+        if (streamIntervalRef.current) clearInterval(streamIntervalRef.current);
+        return;
+      }
+      const rawX = points[currentIndex * 3];
+      const rawY = points[currentIndex * 3 + 1];
+      const rawZ = points[currentIndex * 3 + 2];
+      const normX = (rawX + hx) / (2 * hx);
+      const normY = (rawY + hy) / (2 * hy);
+      const normZ = (rawZ + hz) / (2 * hz);
+      if (audioService && typeof audioService.sendModulation === 'function') {
+        audioService.sendModulation(normX, normY, normZ);
+      }
+      currentIndex += stride;
+    }, TICK_MS);
+  }, [mapDef]);
+
+  // Refs so VR callbacks (captured once at session setup) always see the
+  // latest seed/clear implementations.
+  const seedPathRef = useRef(seedPathAtWorldPoint);
+  const handleClearRef = useRef(handleClear);
+  seedPathRef.current = seedPathAtWorldPoint;
+  handleClearRef.current = handleClear;
+
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     pointerDownPos.current = { x: e.clientX, y: e.clientY };
   }, []);
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     const dx = Math.abs(e.clientX - pointerDownPos.current.x);
-    // FIXED TYPO: Corrected pointer down reference matching from clientX to clientY
     const dy = Math.abs(e.clientY - pointerDownPos.current.y);
     if (dx > 4 || dy > 4) return; // ignore drags
 
@@ -175,97 +297,8 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
     const worldPt = new THREE.Vector3();
     raycaster.ray.intersectPlane(plane, worldPt);
 
-    const rot = mapDef.rotation ?? { x: 0, y: 0, z: 0 };
-    const invEuler = new THREE.Euler(-rot.x, -rot.y, -rot.z, 'ZYX');
-    const unrotated = worldPt.clone().applyEuler(invEuler);
-
-    const initial = mapDef.worldToAttractor(unrotated.x, unrotated.y, unrotated.z);
-
-    setShowHint(false);
-    setComputing(true);
-
-    // Clear any existing audio playback interval before starting a new path trace
-    if (streamIntervalRef.current) {
-      clearInterval(streamIntervalRef.current);
-      streamIntervalRef.current = null;
-    }
-
-    const pm = pathManagerRef.current;
-    if (pm) {
-      // Draw the path instantly to calculate its positions array
-      const entry = pm.drawPath(
-        iterationsRef.current,
-        colorRef.current,
-        renderModeRef.current,
-        initial,
-        lineWidthRef.current
-      );
-
-      if (entry && entry.positions) {
-        setPathCount(pm.count);
-        setPaths([...pm.entries]);
-
-        // The path is fully computed at this point — drawPath returned synchronously.
-        // The interval below only streams coordinates to the audio engine for modulation,
-        // so the spinner can stop now.
-        setComputing(false);
-
-        const points = entry.positions; // Flat Float32Array structured as [x0, y0, z0, x1, y1, z1...]
-        const totalPoints = points.length / 3;
-        let currentIndex = 0;
-
-        // Pull the map definition's operational bounding extents for scaling
-        const { hx = 0, hy = 0, hz = 0 } = mapDef.axisBox ?? {};
-
-        // Audio playback should always finish within a fixed wall-clock window,
-        // regardless of how many iterations the path contains. We step through
-        // multiple points per tick when needed so the whole sweep fits.
-        const TARGET_AUDIO_MS = soundDurationRef.current * 1000;
-        const TICK_MS = 25;            // ~40 ticks/sec
-        const totalTicks = Math.max(1, Math.ceil(TARGET_AUDIO_MS / TICK_MS));
-        const stride = Math.max(1, Math.floor(totalPoints / totalTicks));
-
-        // Begin streaming the coordinates sequentially to the audio engine
-        streamIntervalRef.current = setInterval(() => {
-          if (currentIndex >= totalPoints) {
-            if (streamIntervalRef.current) clearInterval(streamIntervalRef.current);
-            return;
-          }
-
-          // Extract the point parameters
-          const rawX = points[currentIndex * 3];
-          const rawY = points[currentIndex * 3 + 1];
-          const rawZ = points[currentIndex * 3 + 2];
-
-          // DYNAMIC NORMALIZATION: Translate raw values into standard 0.0 -> 1.0 spaces
-          // Maps coordinate ranges from [-extent, +extent] safely onto [0.0, 1.0]
-          const normX = (rawX + hx) / (2 * hx);
-          const normY = (rawY + hy) / (2 * hy);
-          const normZ = (rawZ + hz) / (2 * hz);
-
-          // Push the latest modulation values to the WebPd audio worklet
-          if (audioService && typeof audioService.sendModulation === 'function') {
-            audioService.sendModulation(normX, normY, normZ);
-          }
-
-          currentIndex += stride;
-        }, TICK_MS);
-      } else {
-        setComputing(false);
-      }
-    } else {
-      setComputing(false);
-    }
-  }, [mapDef]);
-
-  const handleClear = useCallback(() => {
-    const pm = pathManagerRef.current;
-    if (pm) {
-      pm.clearAll();
-      setPathCount(0);
-      setPaths([]);
-    }
-  }, []);
+    seedPathAtWorldPoint(worldPt);
+  }, [seedPathAtWorldPoint]);
 
   const handleRemovePath = useCallback((id: number) => {
     const pm = pathManagerRef.current;
@@ -297,6 +330,8 @@ export function AttractorPage({ mapDef, onMenuClick }: AttractorPageProps) {
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
       />
+
+      <div ref={vrButtonRef} className={styles.vrButtonHost} />
 
       {showHint && (
         <div className={styles.hintOverlay}>

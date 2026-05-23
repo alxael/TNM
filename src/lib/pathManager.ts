@@ -10,6 +10,7 @@ export interface PathEntry {
   color: string;
   iterations: number;
   mode: 'points' | 'line';
+  positions: Float32Array; // Added to store raw positions
 }
 
 export class PathManager {
@@ -116,7 +117,7 @@ export class PathManager {
     obj.rotation.set(rot.x, rot.y, rot.z);
     this.scene.add(obj);
 
-    const entry: PathEntry = { id: this.idCounter++, obj, color, iterations, mode };
+    const entry: PathEntry = { id: this.idCounter++, obj, color, iterations, mode, positions };
     this.paths.push(entry);
     return entry;
   }

@@ -18,6 +18,8 @@ interface SettingsPanelProps {
   onColorChange: (value: string) => void;
   lineWidth: number;
   onLineWidthChange: (value: number) => void;
+  soundDuration: number;
+  onSoundDurationChange: (value: number) => void;
 }
 
 const PALETTE = [
@@ -59,6 +61,8 @@ export function SettingsPanel({
   onColorChange,
   lineWidth,
   onLineWidthChange,
+  soundDuration,
+  onSoundDurationChange,
 }: SettingsPanelProps) {
   const styles = useStyles();
 
@@ -92,6 +96,20 @@ export function SettingsPanel({
             step={0.5}
             value={lineWidth}
             onChange={(_, data) => onLineWidthChange(data.value)}
+          />
+        </Field>
+
+        <Field
+          label="Sound length"
+          hint="How long each path's audio plays"
+        >
+          <Body1>{soundDuration}s</Body1>
+          <Slider
+            min={1}
+            max={30}
+            step={1}
+            value={soundDuration}
+            onChange={(_, data) => onSoundDurationChange(data.value)}
           />
         </Field>
 

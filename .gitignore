@@ -25,3 +25,6 @@ dist-ssr
 
 # Other stuff
 .DS_Store
+
+# WebPd build artifacts (regenerate with `npm run pd:build`)
+public/webpd/

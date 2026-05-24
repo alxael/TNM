@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run pd:build && tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "pd:build": "mkdir -p public/webpd && webpd -i src/assets/main.pd -o public/webpd -f app"
